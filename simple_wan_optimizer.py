@@ -41,23 +41,16 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         if packet.dest in self.address_to_port:
             # The packet is destined to one of the clients connected to this middlebox;
             # send the packet there.
+            outgoing_port = self.address_to_port[packet.dest]
             if packet.is_raw_data:
                 # send data through
-                #print("SENDING RAW DATA FROM receive")
-                #print(packet)
-                #print("=======================")
-                #print("Payload: " + packet.payload)
-                #print("=======================")
-                self.send(packet, self.address_to_port[packet.dest])
+                self.send(packet, outgoing_port)
                 self.buffer_and_cache(packet)
             else: # it's a hash
                 hashed = packet.payload
                 unhashed = cache[hashed]
                 # construct new packet from unhashed data, send it
-                new_packet = Packet(packet.src, packet.dest, True, packet.is_fin, unhashed)
-                #print("SENDING HASH_PACKET FROM buffer_cache_and_send")
-                #print(hash_packet)
-                self.send(new_packet, self.address_to_port[packet.dest])
+                self.packetize_and_send(unhashed,flow, packet.is_fin, outgoing_port)
             if packet.is_fin:
                 self.flush_buffer(flow) # finish caching whatever's in the buffer
         else:
@@ -113,31 +106,24 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
             # All FIN packets sent by send_remaining_in_buffer
             if hashed in cache: # send hashed block
                 hash_packet =  Packet(packet.src, packet.dest, False, False, hashed)
-                #print("SENDING HASH_PACKET FROM buffer_cache_and_send")
-                #print(hash_packet)
                 self.send(hash_packet, self.wan_port)
             else: # hash and send data
                 cache[hashed] = to_hash
-                self.packetize_and_send(to_hash,flow, False)
+                self.packetize_and_send(to_hash,flow, False, self.wan_port)
             self.flows_to_buffers[flow] = packet.payload[remaining_bytes:]
 
-    def packetize_and_send(self, to_send, flow, is_fin):
+    def packetize_and_send(self, to_send, flow, is_fin, outgoing_port):
         """Packetizes and sends everything in to_send"""
         src, dest = flow[0], flow[1]
         num_full_packets = len(to_send) / utils.MAX_PACKET_SIZE
         for i in range(num_full_packets):
             subset = to_send[i*utils.MAX_PACKET_SIZE:(i+1)*utils.MAX_PACKET_SIZE]
             new_packet = Packet(src, dest, True, False, subset)
-            #print("SENDING DATA PACKET FROM packetize_and_send with is_fin = " + str(is_fin))
-            #print(new_packet)
-            #print("=======================")
-            #print("Payload: " + new_packet.payload)
-            #print("=======================")
-            self.send(new_packet, self.wan_port)
+            self.send(new_packet, outgoing_port)
         # leftovers - note will send an empty packet on purpose if nothing left
         subset = to_send[num_full_packets*utils.MAX_PACKET_SIZE:]
         tail_packet = Packet(src, dest, True, is_fin, subset)
-        self.send(tail_packet, self.wan_port)
+        self.send(tail_packet, outgoing_port)
 
     def send_remaining_in_buffer(self, flow):
         # Hash and sends whatever is left in the buffer
@@ -147,9 +133,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         cache = self.flows_to_caches[flow]
         if hashed in cache: # send hashed
             hash_packet =  Packet(src, dest, False, True, hashed) # is_fin = True
-            #print("SENDING HASH_PACKET FROM send_remaining_in_buffer")
-            #print(hash_packet)
             self.send(hash_packet, self.wan_port)
         else: # hash and send raw data
             cache[hashed] = curr_buffer
-            self.packetize_and_send(curr_buffer, flow, True)
+            self.packetize_and_send(curr_buffer, flow, True, self.wan_port)
