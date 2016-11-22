@@ -5,9 +5,9 @@ class BaseWanOptimizer():
     ports, and keeps track of the network element connected to each port.
 
     You should NOT modify this class or turn it in with your submitted code.
-    You should also not change any of the variables defined here (but you are 
+    You should also not change any of the variables defined here (but you are
     welcome to access them).
-    """ 
+    """
 
     # The string of bits to compare the lower order 13 bits of hash to
     GLOBAL_MATCH_BITSTRING = '0111011001010'
@@ -33,7 +33,7 @@ class BaseWanOptimizer():
 
     def send(self, packet, outgoing_port):
         """ Sends the given packet out the given port.
-        
+
         This method should only be called internally by subclasses (it should not be called
         from other middleboxes that are connected to this).
         """
