@@ -59,17 +59,17 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
 
     def receive_client(self, packet):
         outgoing_port = self.address_to_port[packet.dest]
+        flow = (packet.src, packet.dest)
         if packet.is_raw_data:
             # send data through
             self.send(packet, outgoing_port)
             self.receive_helper(packet, self.flush_buffer_client)
         else: # it's a hash
-            flow = (packet.src, packet.dest)
             cache = self.flows_to_caches[flow]
             hashed = packet.payload
             unhashed = cache[hashed]
             # construct new packet from unhashed data, send it
-            self.packetize_and_send(unhashed,flow, packet.is_fin, outgoing_port)
+            self.packetize_and_send(unhashed, flow, packet.is_fin, outgoing_port)
         if packet.is_fin:
             self.handle_flow_fin_client(flow)
 
@@ -84,10 +84,10 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
             self.flows_to_buffers[flow] += packet.payload[i]
             hashed = self.compute_hash(flow)
             if hashed is not None:
-                if is_block_end(hashed):
+                if self.is_block_end(hashed):
                     flush_buffer(flow)
                 else:
-                    curr_pointer += 1
+                    self.buffer_pointers[flow] += 1
 
     def is_long_enough(self, block):
         return (len(block) >= self.WINDOW_SIZE)
@@ -97,7 +97,8 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         return (to_compare == self.GLOBAL_MATCH_BITSTRING)
 
     def flush_buffer_client(self, flow):
-        hashed = self.compute_hash(flow)
+        curr_buffer = self.flows_to_buffers[flow]
+        hashed = utils.get_hash(curr_buffer)
         if hashed is not None:
             cache = self.flows_to_caches[flow]
             curr_buffer = self.flows_to_buffers[flow]
@@ -106,7 +107,8 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
 
     def handle_flow_fin_client(self, flow):
         # Caches whatever is leftover in the buffer. Then closes the flow.
-        hashed = self.compute_hash(flow)
+        curr_buffer = self.flows_to_buffers[flow]
+        hashed = utils.get_hash(curr_buffer)
         if hashed is not None:
             curr_buffer = self.flows_to_buffers[flow]
             cache = self.flows_to_caches[flow]
@@ -117,18 +119,21 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         self.receive_helper(packet,self.flush_buffer_source)
         if packet.is_fin:
             flow = (packet.src, packet.dest)
-            handle_flow_fin_source(flow)
+            self.handle_flow_fin_source(flow)
 
 
-    def flush_buffer_source(self, packet):
-        flow = (packet.src,packet.dest)
-        hashed = self.compute_hash(flow)
+    def flush_buffer_source(self, flow):
+        curr_buffer = self.flows_to_buffers[flow]
+        hashed = utils.get_hash(curr_buffer)
+        cache = self.flows_to_caches[flow]
         # Can assume not handling fin packet
         if (hashed is not None) and (hashed in cache): # send hashed block
-            hash_packet =  Packet(packet.src, packet.dest, False, False, hashed)
+            src, dest = flow
+            hash_packet = Packet(src,dest, False, False, hashed)
             self.send(hash_packet, self.wan_port)
         else: # hash and send data
             cache = self.flows_to_caches[flow]
+            curr_buffer = self.flows_to_buffers[flow]
             if hashed is not None:
                 cache[hashed] = curr_buffer
             self.packetize_and_send(curr_buffer, flow, False, self.wan_port)
@@ -139,26 +144,26 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         curr_buffer = self.flows_to_buffers[flow]
         curr_ptr = self.buffer_pointers[flow]
         hashed = None
-        if is_long_enough(curr_buffer):
+        if self.is_long_enough(curr_buffer):
             to_hash = curr_buffer[curr_ptr:curr_ptr + self.WINDOW_SIZE]
-            hashed = utils.hash(to_hash)
+            hashed = utils.get_hash(to_hash)
         return hashed
-
 
     def handle_flow_fin_source(self, flow):
         # Hashes and sends whatever is left in the buffer
         # and does flow cleanup
-        hashed = self.compute_hash(flow)
+        curr_buffer = self.flows_to_buffers[flow]
+        hashed = utils.get_hash(curr_buffer)
+        cache = self.flows_to_caches[flow]
         if (hashed is not None) and (hashed in cache):
             src, dest = flow[0], flow[1]
             hash_packet = Packet(src, dest, False, True, hashed) # is_fin = True
+            self.send(hash_packet, self.wan_port)
         else:
             curr_buffer = self.flows_to_buffers[flow]
-            cache = self.flows_to_cache[flow]
             if hashed is not None:
                 cache[hashed] = curr_buffer
             self.packetize_and_send(curr_buffer, flow, True, self.wan_port)
-
         self.close_flow(flow)
 
     def close_flow(self, flow):
