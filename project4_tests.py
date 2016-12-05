@@ -91,6 +91,36 @@ def main():
         "--verify-middlebox-handles-interleaved-data",
         dest="verify_middlebox_handles_interleaved_data",
         action="store_true")
+    parser.add_argument(
+        "--send-fin-overload-buffer",
+        dest="send_fin_overload_buffer",
+        action="store_true"
+        )
+    parser.add_argument(
+        "--test_delimiter_at_end_without_fin",
+        dest="test_delimiter_at_end_without_fin",
+        action="store_true"
+        )
+    parser.add_argument(
+        "--test_delimiter_in_middle_with_fin_after",
+        dest="test_delimiter_in_middle_with_fin_after",
+        action="store_true"
+        )
+    parser.add_argument(
+        "--test_delimiter_at_end_with_fin",
+        dest="test_delimiter_at_end_with_fin",
+        action="store_true"
+        )
+    parser.add_argument(
+        "--data_reduction_with_jumbled_files",
+        dest="data_reduction_with_jumbled_files",
+        action="store_true"
+        )
+    parser.add_argument(
+        "--cross_sending",
+        dest="cross_sending",
+        action="store_true"
+        )
 
     args = parser.parse_args()
     if args.middlebox_name.endswith(".py"):
@@ -160,6 +190,18 @@ def main():
             middlebox_module,
             testing_part_1)
         total_tests += 1
+    if args.data_reduction_with_jumbled_files or args.run_all:
+        passed_tests += run_test(
+            diamond_top_2_electric_boogaloo.data_reduction_with_jumbled_files,
+            middlebox_module,
+            testing_part_1)
+        total_tests += 1
+    if args.cross_sending or args.run_all:
+        passed_tests += run_test(
+            diamond_top_2_electric_boogaloo.cross_sending,
+            middlebox_module,
+            testing_part_1)
+        total_tests += 1
     if args.data_reduction_suffixed_files or args.run_all:
         test_module = data_reduction_suffixed_files
         passed_tests += run_test(
@@ -192,6 +234,31 @@ def main():
         test_module = verify_middlebox_handles_interleaved_data
         passed_tests += run_test(
             test_module.verify_middlebox_handles_interleaved_data,
+            middlebox_module,
+            testing_part_1)
+        total_tests += 1
+    if args.send_fin_overload_buffer or args.run_all:
+        test_module = send_fin_overload_buffer
+        passed_tests += run_test(
+            test_module.send_fin_overload_buffer,
+            middlebox_module,
+            testing_part_1)
+        total_tests += 1
+    if args.test_delimiter_at_end_without_fin or args.run_all:
+        passed_tests += run_test(
+            eric_tests.test_delimiter_at_end_without_fin,
+            middlebox_module,
+            testing_part_1)
+        total_tests += 1
+    if args.test_delimiter_in_middle_with_fin_after or args.run_all:
+        passed_tests += run_test(
+            eric_tests.test_delimiter_in_middle_with_fin_after,
+            middlebox_module,
+            testing_part_1)
+        total_tests += 1
+    if args.test_delimiter_at_end_with_fin or args.run_all:
+        passed_tests += run_test(
+            eric_tests.test_delimiter_at_end_with_fin,
             middlebox_module,
             testing_part_1)
         total_tests += 1

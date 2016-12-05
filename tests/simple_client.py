@@ -15,7 +15,9 @@ class SimpleClient():
         self.gateway_middlebox.connect(self, self.ip_address)
 
         self.received_fin = False
-        self.output_file = open(output_filename, "w")
+        self.output_file =  open(output_filename, "w")
+        self.output_open = True
+        self.output_filename = output_filename
 
     def send_data(self, data_to_send, destination_ip_address):
         """ Packetizes and sends the given data.
@@ -27,13 +29,36 @@ class SimpleClient():
         while start < len(data_to_send):
             end = start + utils.MAX_PACKET_SIZE
             packet = tcp_packet.Packet(
-                self.ip_address, 
+                self.ip_address,
                 destination_ip_address,
                 is_raw_data = True,
                 is_fin = False,
                 payload = data_to_send[start:end])
             self.gateway_middlebox.receive(packet)
             start = start + utils.MAX_PACKET_SIZE
+
+    def send_data_with_fin(self, data_to_send, destination_ip_address):
+        """ Packetizes and sends the given data. Last packet is a fin
+        """
+        start = 0
+        packets_to_send = []
+        while start < len(data_to_send):
+            end = start + utils.MAX_PACKET_SIZE
+            packet = tcp_packet.Packet(
+                self.ip_address,
+                destination_ip_address,
+                is_raw_data = True,
+                is_fin = False,
+                payload = data_to_send[start:end])
+            packets_to_send.append(packet)
+            start = start + utils.MAX_PACKET_SIZE
+        last_packet = packets_to_send[-1]
+        last_packet.is_fin = True
+        packets_to_send[-1] = last_packet
+        for p in packets_to_send:
+            self.gateway_middlebox.receive(packet)
+
+
 
     def send_fin(self, destination_ip_address):
         packet = tcp_packet.Packet(
@@ -43,13 +68,18 @@ class SimpleClient():
             is_fin = True,
             payload = "")
         self.gateway_middlebox.receive(packet)
+        # print("sending fin")
 
     def receive(self, packet):
         if self.received_fin:
             raise Exception(("Client at {} already received a FIN, so " +
                 "should not be receiving more data.").format(self.ip_address))
+        if not self.output_open:
+            self.output_file = open(self.output_filename, "a")
         self.received_fin = packet.is_fin
         self.output_file.write(packet.payload)
-        if self.received_fin:
-            self.output_file.close()
-           
+        self.output_file.close()
+        self.output_open = False
+
+        # if self.received_fin:
+        #     self.output_file.close()
