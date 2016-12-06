@@ -17,6 +17,7 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         # Add any code that you like here (but do not add any constructor arguments).
         self.flows_to_buffers = {} # Maps flows (src, dest) pairs to buffers
         self.flows_to_caches = {} # Maps flows to a dictionary of seen values for that flow
+        self.caches = {}
         return
 
     def receive(self, packet):
@@ -34,19 +35,20 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         flow = (packet.src, packet.dest)
         if not self.is_open_flow(flow):
             self.flows_to_buffers[flow] = ""
-        if flow not in self.flows_to_caches:
-            self.flows_to_caches[flow] = {}
-        cache = self.flows_to_caches[flow]
+        # if flow not in self.flows_to_caches:
+        #     self.flows_to_caches[flow] = {}
+        # cache = self.flows_to_caches[flow]
+        cache = self.caches
 
         if packet.dest in self.address_to_port:
             # The packet is destined to one of the clients connected to this middlebox;
             # send the packet there.
             outgoing_port = self.address_to_port[packet.dest]
-            if packet.is_raw_data:
+            if packet.is_raw_data :
                 # send data through
                 self.send(packet, outgoing_port)
                 self.buffer_and_cache(packet)
-            else: # it's a hash
+            elif packet.payload in cache: # it's a hash
                 hashed = packet.payload
                 unhashed = cache[hashed]
                 # construct new packet from unhashed data, send it
@@ -75,7 +77,8 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         else:
             to_hash = curr_buffer + packet.payload[:remaining_bytes]
             hashed = utils.get_hash(to_hash)
-            cache = self.flows_to_caches[flow]
+            # cache = self.flows_to_caches[flow]
+            cache = self.caches
             cache[hashed] = to_hash
             self.flows_to_buffers[flow] = packet.payload[remaining_bytes:]
 
@@ -83,7 +86,8 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         # Caches whatever is leftover in the buffer. Then deletes buffer.
         # Used when FIN packet is seen.
         curr_buffer = self.flows_to_buffers[flow]
-        cache = self.flows_to_caches[flow]
+        # cache = self.flows_to_caches[flow]
+        cache = self.caches
         if (len(curr_buffer) > 0):
             hashed = utils.get_hash(curr_buffer)
             cache[hashed] = curr_buffer
@@ -102,7 +106,8 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         else: # buffer full
             to_hash = curr_buffer + packet.payload[:remaining_bytes]
             hashed = utils.get_hash(to_hash)
-            cache = self.flows_to_caches[flow]
+            # cache = self.flows_to_caches[flow]
+            cache = self.caches
             # All FIN packets sent by send_remaining_in_buffer
             if hashed in cache: # send hashed block
                 hash_packet =  Packet(packet.src, packet.dest, False, False, hashed)
@@ -130,7 +135,8 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         curr_buffer = self.flows_to_buffers[flow]
         hashed = utils.get_hash(curr_buffer)
         src, dest = flow[0], flow[1]
-        cache = self.flows_to_caches[flow]
+        # cache = self.flows_to_caches[flow]
+        cache = self.caches
         if hashed in cache: # send hashed
             hash_packet =  Packet(src, dest, False, True, hashed) # is_fin = True
             self.send(hash_packet, self.wan_port)
