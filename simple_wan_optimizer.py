@@ -48,11 +48,12 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
                 # send data through
                 self.send(packet, outgoing_port)
                 self.buffer_and_cache(packet)
-            elif packet.payload in cache: # it's a hash
+            else: # it's a hash
                 hashed = packet.payload
                 unhashed = cache[hashed]
                 # construct new packet from unhashed data, send it
                 self.packetize_and_send(unhashed,flow, packet.is_fin, outgoing_port)
+
             if packet.is_fin:
                 self.flush_buffer(flow) # finish caching whatever's in the buffer
         else:
