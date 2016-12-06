@@ -16,7 +16,6 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         wan_optimizer.BaseWanOptimizer.__init__(self)
         # Add any code that you like here (but do not add any constructor arguments).
         self.flows_to_buffers = {} # Maps flows (src, dest) pairs to buffers
-        self.flows_to_caches = {} # Maps flows to a dictionary of seen values for that flow
         self.caches = {}
         return
 
@@ -35,9 +34,6 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         flow = (packet.src, packet.dest)
         if not self.is_open_flow(flow):
             self.flows_to_buffers[flow] = ""
-        # if flow not in self.flows_to_caches:
-        #     self.flows_to_caches[flow] = {}
-        # cache = self.flows_to_caches[flow]
         cache = self.caches
 
         if packet.dest in self.address_to_port:
@@ -87,7 +83,6 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
         # Caches whatever is leftover in the buffer. Then deletes buffer.
         # Used when FIN packet is seen.
         curr_buffer = self.flows_to_buffers[flow]
-        # cache = self.flows_to_caches[flow]
         cache = self.caches
         if (len(curr_buffer) > 0):
             hashed = utils.get_hash(curr_buffer)
@@ -142,5 +137,6 @@ class WanOptimizer(wan_optimizer.BaseWanOptimizer):
             hash_packet =  Packet(src, dest, False, True, hashed) # is_fin = True
             self.send(hash_packet, self.wan_port)
         else: # hash and send raw data
-            cache[hashed] = curr_buffer
+            if (len(curr_buffer) > 0):
+                cache[hashed] = curr_buffer
             self.packetize_and_send(curr_buffer, flow, True, self.wan_port)
